@@ -1,0 +1,53 @@
+DATASET SUMMARY
+============================================================
+Scanned folder : D:\MIMII
+Audio files    : 4205
+Audio types    : {'.wav': 4205}
+
+FOLDER STRUCTURE (first 3 levels, audio file counts)
+------------------------------------------------------------
+pump/  (4205 files)
+  id_00/  (1149 files)
+    abnormal/  (143 files)
+    normal/  (1006 files)
+  id_02/  (1116 files)
+    abnormal/  (111 files)
+    normal/  (1005 files)
+  id_04/  (802 files)
+    abnormal/  (100 files)
+    normal/  (702 files)
+  id_06/  (1138 files)
+    abnormal/  (102 files)
+    normal/  (1036 files)
+
+LABELS FOUND
+------------------------------------------------------------
+  abnormal: 456
+  normal: 3749
+
+MACHINE TYPE / MACHINE ID / LABEL
+------------------------------------------------------------
+  pump       id_00      abnormal   143
+  pump       id_00      normal     1006
+  pump       id_02      abnormal   111
+  pump       id_02      normal     1005
+  pump       id_04      abnormal   100
+  pump       id_04      normal     702
+  pump       id_06      abnormal   102
+  pump       id_06      normal     1036
+
+SAMPLE FILE NAMES (first 5)
+------------------------------------------------------------
+  pump/id_00/abnormal/00000000.wav
+  pump/id_00/abnormal/00000001.wav
+  pump/id_00/abnormal/00000002.wav
+  pump/id_00/abnormal/00000003.wav
+  pump/id_00/abnormal/00000004.wav
+
+FIRST AUDIO FILE DETAILS
+------------------------------------------------------------
+  File        : pump/id_00/abnormal/00000000.wav
+  Sample rate : 16000 Hz
+  Channels    : 8
+  Duration    : 10.00 s
+  Format      : WAVEX / PCM_16
