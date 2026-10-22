@@ -1,0 +1,14 @@
+streamlit
+fastapi
+uvicorn
+python-multipart
+requests
+numpy
+pandas
+scipy
+soundfile
+plotly
+matplotlib
+pytest
+httpx
+python-dotenv
