@@ -29,3 +29,4 @@ dataset/
 .vscode/
 .DS_Store
 Thumbs.db
+data/test_audio/
