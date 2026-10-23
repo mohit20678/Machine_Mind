@@ -6,7 +6,8 @@ Run from the project root:
 import plotly.express as px
 import streamlit as st
 
-from components.demo_data import empty_data, get_demo_data
+from components.data_source import load_dashboard_data
+from components.demo_data import get_demo_data
 from components.ui import (
     COLOR_ABNORMAL,
     COLOR_NEUTRAL,
@@ -31,26 +32,44 @@ hero(
     "behaviour before it becomes a breakdown.",
 )
 
-# Choose the data source
+# Choose the data source: fake demonstration data, or the real database.
 if show_demo:
     machines, analyses, alerts = get_demo_data()
+    stats = {
+        "total_machines": len(machines),
+        "total_analyses": len(analyses),
+        "normal_count": int((analyses["prediction"] == "Normal").sum()),
+        "abnormal_count": int((analyses["prediction"] == "Potentially Abnormal").sum()),
+        "mock_analyses": 0,
+    }
     st.warning(
         "DEMONSTRATION DATA: every number, chart and table below is fake and is "
         "shown only to preview the design. Untick the box in the sidebar to hide it."
     )
 else:
-    machines, analyses, alerts = empty_data()
-    st.info(
-        "No analyses yet. The database is added in Milestone 5, so real values "
-        "will appear here after that. Tick 'Show demonstration data' in the "
-        "sidebar to preview the design."
-    )
+    try:
+        stats, machines, analyses, alerts = load_dashboard_data()
+    except Exception as error:
+        st.error(f"The database could not be read: {error}")
+        st.stop()
 
-# Work out the numbers for the cards
-total_machines = len(machines)
-total_analyses = len(analyses)
-normal_count = int((analyses["prediction"] == "Normal").sum())
-abnormal_count = int((analyses["prediction"] == "Potentially Abnormal").sum())
+    if stats["total_analyses"] == 0:
+        st.info(
+            "No analyses saved yet. You can already register machines on the Machines page. "
+            "Analyses will appear here once the backend and the ML model are connected "
+            "(Milestones 6 to 8). Tick 'Show demonstration data' in the sidebar to preview "
+            "the design."
+        )
+    if stats["mock_analyses"] > 0:
+        st.warning(
+            f"{stats['mock_analyses']} saved analysis record(s) come from a MOCK placeholder, "
+            "not from a real ML model. They are not genuine AI predictions."
+        )
+
+total_machines = stats["total_machines"]
+total_analyses = stats["total_analyses"]
+normal_count = stats["normal_count"]
+abnormal_count = stats["abnormal_count"]
 
 if total_analyses == 0:
     status_text, status_note, status_color = "No data", "No recordings analysed yet", COLOR_NEUTRAL
@@ -77,7 +96,7 @@ with col5:
     metric_card("Potentially abnormal", abnormal_count, "Recordings", COLOR_ABNORMAL, 0.48)
 
 st.markdown("### Analysis results over time")
-if total_analyses == 0:
+if len(analyses) == 0:
     st.info("Nothing to chart yet. A chart appears here once recordings are analysed.")
 else:
     chart_data = analyses.copy()
@@ -111,7 +130,7 @@ left, right = st.columns(2)
 
 with left:
     st.markdown("### Recent analyses")
-    if total_analyses == 0:
+    if len(analyses) == 0:
         st.info("No analyses yet.")
     else:
         recent = analyses.head(8).copy()
