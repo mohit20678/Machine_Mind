@@ -1,25 +1,20 @@
-"""The ONE place where the frontend gets its data.
+"""The ONE place where the frontend talks to the backend.
 
-Milestone 5 (now): reads the SQLite database directly. This is a temporary shortcut.
-Milestone 6: the functions below will call the FastAPI backend instead.
-The pages will not need to change, because they only use the functions in this file.
+Milestone 6: every function here calls the FastAPI backend over HTTP.
+The frontend no longer reads the database directly.
+
+The backend address can be changed with the environment variable MACHINEMIND_API_URL
+(default http://127.0.0.1:8000).
 """
-import sys
+import os
 from datetime import datetime
-from pathlib import Path
 
-# Let the frontend import the "database" package that sits in the project root.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+import pandas as pd
+import requests
 
-import pandas as pd  # noqa: E402
-
-from database import models  # noqa: E402
-from database.db import init_db  # noqa: E402
-
-# Pages catch this to show a friendly message.
-DatabaseError = models.DatabaseError
+API_URL = os.environ.get("MACHINEMIND_API_URL", "http://127.0.0.1:8000").rstrip("/")
+REQUEST_TIMEOUT = 15      # seconds, for normal requests
+ANALYSIS_TIMEOUT = 120    # seconds, an analysis may take longer
 
 MACHINE_TYPES = ["Pump", "Fan", "Slider", "Valve", "Motor", "Gearbox", "Other"]
 
@@ -28,30 +23,81 @@ ANALYSIS_COLUMNS = ["timestamp", "machine_id", "filename", "prediction", "anomal
 ALERT_COLUMNS = ["timestamp", "machine_id", "filename", "anomaly_score", "message", "status"]
 
 
+class BackendError(Exception):
+    """The backend refused the request or failed. The message can be shown to the user."""
+
+
+class BackendUnavailable(BackendError):
+    """The backend is not running or cannot be reached."""
+
+
+def _request(method, path, timeout=REQUEST_TIMEOUT, **kwargs):
+    """Call the backend and return its JSON answer (None for an empty answer)."""
+    try:
+        response = requests.request(method, API_URL + path, timeout=timeout, **kwargs)
+    except requests.exceptions.ConnectionError:
+        raise BackendUnavailable(
+            f"The backend is not running at {API_URL}. Start it in a second terminal with: "
+            "uvicorn backend.main:app --reload --port 8000"
+        ) from None
+    except requests.exceptions.Timeout:
+        raise BackendError("The backend took too long to answer. Please try again.") from None
+    except requests.exceptions.RequestException as error:
+        raise BackendError(f"The backend could not be reached: {error}") from None
+
+    if response.status_code >= 400:
+        detail = None
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                detail = body.get("detail")
+        except ValueError:
+            pass
+        raise BackendError(str(detail) if detail else f"The backend returned an error ({response.status_code}).")
+
+    if response.status_code == 204 or not response.content:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        raise BackendError("The backend sent an answer that could not be understood.") from None
+
+
 def _to_local_time(series):
     """Turn stored UTC time text into your computer's local time."""
     local_zone = datetime.now().astimezone().tzinfo
     return pd.to_datetime(series, utc=True).dt.tz_convert(local_zone).dt.tz_localize(None)
 
 
+def check_backend():
+    """Raises BackendError if the backend or its database is not working."""
+    _request("GET", "/api/health")
+
+
+def get_model_status():
+    """Is real ML inference connected, or only the placeholder?"""
+    return _request("GET", "/api/model/status")
+
+
 def load_stats():
-    """Counts for the dashboard cards (a dictionary of numbers)."""
-    init_db()
-    return models.get_dashboard_stats()
+    return _request("GET", "/api/stats")
+
+
+def list_machines():
+    """Registered machines as a list of dictionaries."""
+    return _request("GET", "/api/machines")
 
 
 def load_machines_df():
     """Registered machines as a table. Empty table if there are none."""
-    init_db()
-    frame = pd.DataFrame(models.list_machines(), columns=MACHINE_COLUMNS)
+    frame = pd.DataFrame(list_machines(), columns=MACHINE_COLUMNS)
     frame["created_at"] = _to_local_time(frame["created_at"])
     return frame
 
 
 def load_analyses_df(limit=1000):
     """Saved analyses (newest first) as a table. Empty table if there are none."""
-    init_db()
-    rows = models.list_analyses(limit=limit)
+    page = _request("GET", "/api/analyses", params={"limit": limit})
     records = [
         {
             "timestamp": row["created_at"],
@@ -61,7 +107,7 @@ def load_analyses_df(limit=1000):
             "anomaly_score": row["anomaly_score"],
             "source": "MOCK (not a real model)" if row["is_mock"] else "Real model",
         }
-        for row in rows
+        for row in page["items"]
     ]
     frame = pd.DataFrame(records, columns=ANALYSIS_COLUMNS)
     frame["timestamp"] = _to_local_time(frame["timestamp"])
@@ -70,8 +116,7 @@ def load_analyses_df(limit=1000):
 
 def load_alerts_df(limit=1000):
     """Saved alerts (newest first) as a table. Empty table if there are none."""
-    init_db()
-    rows = models.list_alerts(limit=limit)
+    rows = _request("GET", "/api/alerts", params={"limit": limit})
     records = [
         {
             "timestamp": row["created_at"],
@@ -94,6 +139,25 @@ def load_dashboard_data():
 
 
 def register_machine(machine_id, name, machine_type, location):
-    """Save a new machine. Raises DatabaseError with a clear message if it is not accepted."""
-    init_db()
-    return models.create_machine(machine_id, name, machine_type, location)
+    """Save a new machine. Raises BackendError with a clear message if it is not accepted."""
+    return _request(
+        "POST",
+        "/api/machines",
+        json={
+            "machine_id": machine_id,
+            "name": name,
+            "machine_type": machine_type,
+            "location": location or None,
+        },
+    )
+
+
+def analyse_recording(machine_pk, filename, file_bytes):
+    """Send a recording to the backend for analysis. Returns the backend's result dictionary."""
+    return _request(
+        "POST",
+        "/api/analyses",
+        timeout=ANALYSIS_TIMEOUT,
+        data={"machine_pk": str(machine_pk)},
+        files={"file": (filename, file_bytes, "audio/wav")},
+    )

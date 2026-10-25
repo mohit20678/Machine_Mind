@@ -1,12 +1,12 @@
 """Machines page: register machines and see the registered ones.
 
-Milestone 5: machines are saved in the SQLite database and survive restarts.
+Milestone 6: the page talks to the backend, which saves machines in the SQLite database.
 """
 import streamlit as st
 
 from components.data_source import (
     MACHINE_TYPES,
-    DatabaseError,
+    BackendError,
     load_machines_df,
     register_machine,
 )
@@ -42,16 +42,14 @@ if submitted:
     try:
         saved = register_machine(machine_id, name, machine_type, location)
         st.success(f"Registered machine {saved['machine_id']} ({saved['name']}).")
-    except DatabaseError as error:
+    except BackendError as error:
         st.error(str(error))
-    except Exception as error:
-        st.error(f"The machine could not be saved: {error}")
 
 st.markdown("### Registered machines")
 try:
     machines = load_machines_df()
-except Exception as error:
-    st.error(f"The machine list could not be loaded: {error}")
+except BackendError as error:
+    st.error(str(error))
     st.stop()
 
 if machines.empty:

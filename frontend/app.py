@@ -1,12 +1,12 @@
 """MachineMind dashboard (home page).
 
-Run from the project root:
+Run from the project root (backend must already be running in another terminal):
     streamlit run frontend/app.py
 """
 import plotly.express as px
 import streamlit as st
 
-from components.data_source import load_dashboard_data
+from components.data_source import BackendError, load_dashboard_data
 from components.demo_data import get_demo_data
 from components.ui import (
     COLOR_ABNORMAL,
@@ -32,7 +32,7 @@ hero(
     "behaviour before it becomes a breakdown.",
 )
 
-# Choose the data source: fake demonstration data, or the real database.
+# Choose the data source: fake demonstration data, or the real data from the backend.
 if show_demo:
     machines, analyses, alerts = get_demo_data()
     stats = {
@@ -49,16 +49,15 @@ if show_demo:
 else:
     try:
         stats, machines, analyses, alerts = load_dashboard_data()
-    except Exception as error:
-        st.error(f"The database could not be read: {error}")
+    except BackendError as error:
+        st.error(str(error))
         st.stop()
 
     if stats["total_analyses"] == 0:
         st.info(
-            "No analyses saved yet. You can already register machines on the Machines page. "
-            "Analyses will appear here once the backend and the ML model are connected "
-            "(Milestones 6 to 8). Tick 'Show demonstration data' in the sidebar to preview "
-            "the design."
+            "No analyses saved yet. Register a machine on the Machines page, then upload a "
+            "recording on the Upload Analysis page. Tick 'Show demonstration data' in the "
+            "sidebar to preview the design."
         )
     if stats["mock_analyses"] > 0:
         st.warning(
